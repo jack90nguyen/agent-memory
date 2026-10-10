@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { db, foldText } from "./db.ts";
+import { detectRemote, normalizeRemote } from "./git.ts";
 import {
   EntryInput,
   EntryPatch,
@@ -33,13 +34,21 @@ type SectionRow = {
   position: number;
 };
 
-type ProjectRow = { id: number; slug: string; name: string; path: string | null; created_at: string };
+type ProjectRow = {
+  id: number;
+  slug: string;
+  name: string;
+  path: string | null;
+  remote: string | null;
+  created_at: string;
+};
 
 const toProject = (r: ProjectRow): Project => ({
   id: r.id,
   slug: r.slug,
   name: r.name,
   path: r.path,
+  remote: r.remote,
   createdAt: r.created_at,
 });
 
@@ -74,7 +83,7 @@ export function findProject(slug: string): Project {
 }
 
 /** Project có `path` là tiền tố dài nhất của cwd. */
-export function findProjectByPath(cwd: string): Project | undefined {
+function findProjectByPath(cwd: string): Project | undefined {
   const rows = db.prepare("SELECT * FROM projects WHERE path IS NOT NULL").all() as ProjectRow[];
   const match = rows
     .filter((r) => cwd === r.path || cwd.startsWith(r.path + "/"))
@@ -82,14 +91,46 @@ export function findProjectByPath(cwd: string): Project | undefined {
   return match && toProject(match);
 }
 
+/** Nhận project: theo git remote trước (clone ở đâu cũng khớp), không có thì theo path. */
+export function findProjectFor(remote: string | undefined, path: string | undefined): Project | undefined {
+  const row = remote && (db.prepare("SELECT * FROM projects WHERE remote = ?").get(remote) as ProjectRow | undefined);
+  if (row) return toProject(row);
+  return path ? findProjectByPath(path) : undefined;
+}
+
+function assertRemoteFree(remote: string) {
+  const owner = db.prepare("SELECT slug FROM projects WHERE remote = ?").get(remote) as { slug: string } | undefined;
+  if (owner) throw new Error(`Remote ${remote} đã thuộc project "${owner.slug}"`);
+}
+
 export function addProject(input: ProjectInput): Project {
   const p = ProjectInput.parse(input);
   // realpath để khớp process.cwd() (vd macOS: /tmp → /private/tmp).
   const path = p.path && existsSync(p.path) ? realpathSync(p.path) : p.path;
+  const remote = p.remote ? normalizeRemote(p.remote) : path ? detectRemote(path) : undefined;
+  if (remote) assertRemoteFree(remote);
   const { lastInsertRowid } = db
-    .prepare("INSERT INTO projects (slug, name, path) VALUES (?, ?, ?)")
-    .run(p.slug, p.name, path ?? null);
+    .prepare("INSERT INTO projects (slug, name, path, remote) VALUES (?, ?, ?, ?)")
+    .run(p.slug, p.name, path ?? null, remote ?? null);
   return toProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(lastInsertRowid) as ProjectRow);
+}
+
+export type BackfillResult = { slug: string; remote?: string; skipped?: string };
+
+/** Gán remote cho các project đã đăng ký trước khi có định danh theo remote. */
+export function backfillRemotes(): BackfillResult[] {
+  const rows = db.prepare("SELECT * FROM projects WHERE remote IS NULL AND path IS NOT NULL ORDER BY slug").all() as ProjectRow[];
+  return rows.map((r) => {
+    const remote = detectRemote(r.path!);
+    if (!remote) return { slug: r.slug, skipped: "không có git remote → vẫn match theo path" };
+    try {
+      assertRemoteFree(remote);
+    } catch (e) {
+      return { slug: r.slug, skipped: (e as Error).message };
+    }
+    db.prepare("UPDATE projects SET remote = ? WHERE id = ?").run(remote, r.id);
+    return { slug: r.slug, remote };
+  });
 }
 
 // ---------- sections ----------
@@ -240,34 +281,4 @@ export function searchEntries(q: string, projectId?: number, limit = 50): Search
     section_type: SectionType;
   })[];
   return rows.map((r) => ({ ...toEntry(r), projectSlug: r.slug, sectionPath: r.path, sectionType: r.section_type }));
-}
-
-// ---------- render cho AI ----------
-
-const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
-
-function renderEntries(entries: Entry[]): string {
-  let out = "";
-  entries.forEach((e, i) => {
-    const prev = entries[i - 1];
-    const sep = !prev ? "" : LIST_ITEM.test(prev.content) && LIST_ITEM.test(e.content) ? "\n" : "\n\n";
-    const meta = [e.refFile && `ref: ${e.refFile}`, e.tags.length > 0 && `tags: ${e.tags.join(",")}`]
-      .filter(Boolean)
-      .join(" · ");
-    out += `${sep}[e${e.id}] ${e.content}${meta ? `  ⟨${meta}⟩` : ""}`;
-  });
-  return out;
-}
-
-/** Ghép cây về markdown, kèm id `[sN]` / `[eN]` để AI dùng cho add/update/del. */
-export function renderTree(project: Project, tree: Section[]): string {
-  const parts = [`# ${project.name} (${project.slug})`];
-  const walk = (s: Section, depth: number) => {
-    parts.push(`${"#".repeat(depth)} ${s.title} [s${s.id} · ${s.type}]`);
-    if (s.entries.length > 0) parts.push(renderEntries(s.entries));
-    s.children.forEach((c) => walk(c, depth + 1));
-  };
-  tree.forEach((s) => walk(s, 2));
-  if (tree.length === 0) parts.push("_(chưa có section nào)_");
-  return parts.join("\n\n");
 }

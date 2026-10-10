@@ -11,6 +11,7 @@ export const ProjectInput = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/, "slug chỉ gồm a-z, 0-9, -"),
   name: z.string().trim().min(1),
   path: z.string().trim().min(1).optional(),
+  remote: z.string().trim().min(1).optional(),
 });
 export type ProjectInput = z.infer<typeof ProjectInput>;
 
@@ -38,6 +39,8 @@ export type Project = {
   slug: string;
   name: string;
   path: string | null;
+  /** git remote đã chuẩn hoá, vd `github.com/husble/toolspy` */
+  remote: string | null;
   createdAt: string;
 };
 
@@ -70,3 +73,9 @@ export type SearchHit = Entry & {
   sectionPath: string;
   sectionType: SectionType;
 };
+
+/** Lỗi Zod → mỗi issue 1 dòng; lỗi khác → message. Dùng chung cho CLI và API. */
+export function formatError(err: unknown): string {
+  if (err instanceof z.ZodError) return err.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("\n");
+  return err instanceof Error ? err.message : String(err);
+}

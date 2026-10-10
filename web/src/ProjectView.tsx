@@ -100,7 +100,7 @@ export function ProjectView({ slug, project, focusId, isMobile }: Props) {
         <div className="project-title">
           <h1>{project.name}</h1>
           <span className="muted">
-            {project.entryCount} entries{project.path && ` · ${project.path}`}
+            {[`${project.entryCount} entries`, project.remote, project.path].filter(Boolean).join(" · ")}
           </span>
         </div>
       )}

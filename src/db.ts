@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS projects (
   slug       TEXT NOT NULL UNIQUE,
   name       TEXT NOT NULL,
   path       TEXT UNIQUE,
+  remote     TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -82,6 +83,11 @@ CREATE TRIGGER IF NOT EXISTS sections_au AFTER UPDATE OF title ON sections BEGIN
     WHERE s.id = new.id OR s.parent_id = new.id;
 END;
 `);
+
+// Migration: DB tạo trước khi có định danh theo git remote.
+const projectCols = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+if (!projectCols.some((c) => c.name === "remote")) db.exec("ALTER TABLE projects ADD COLUMN remote TEXT");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_remote ON projects(remote)");
 
 export function foldText(text: string): string {
   return text.replaceAll("đ", "d").replaceAll("Đ", "D");

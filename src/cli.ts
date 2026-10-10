@@ -1,25 +1,14 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { ZodError } from "zod";
-import {
-  addEntry,
-  addProject,
-  addSection,
-  deleteEntry,
-  deleteSection,
-  findProject,
-  findProjectByPath,
-  getEntry,
-  getTree,
-  listProjects,
-  renderTree,
-  searchEntries,
-  updateEntry,
-} from "./memory.ts";
-import { SectionType, type Project, type SearchHit } from "./schema.ts";
+import { detectRemote } from "./git.ts";
+import { renderTree } from "./render.ts";
+import { formatError, SectionType, type Project, type SearchHit } from "./schema.ts";
+import { openStore } from "./store.ts";
 
 const HELP = `pmem — project memory (SQLite)
+
+Máy khác (qua Tailscale): đặt PMEM_API=http://mac-mini:4100 → CLI gọi API thay vì mở DB local.
 
 Đọc:
   projects                                   Danh sách project
@@ -35,7 +24,11 @@ Ghi:
   del <entryId>
   del-section <sectionId>                    Xoá luôn section con + entry bên trong
 
-Không truyền -p thì tự nhận project theo thư mục hiện tại.
+Bảo trì:
+  backfill-remote                            Gán git remote cho project đăng ký trước đây
+
+Không truyền -p thì tự nhận project của thư mục hiện tại: theo git remote trước
+(clone repo ở folder nào cũng khớp), repo không có remote thì theo path.
 Type: ${SectionType.options.join(" | ")}
 ID chấp nhận dạng 12, e12, s12.`;
 
@@ -67,6 +60,7 @@ try {
 }
 const { values: opts, positionals } = parsed;
 const [cmd, ...args] = positionals;
+const store = await openStore();
 
 const toId = (raw: string | undefined): number => {
   const n = Number(raw?.replace(/^[es]/, ""));
@@ -74,12 +68,13 @@ const toId = (raw: string | undefined): number => {
   return n;
 };
 
-const resolveProject = (): Project => {
-  if (opts.project) return findProject(opts.project);
-  const p = findProjectByPath(process.cwd());
-  if (!p) throw new Error(`Không nhận ra project từ ${process.cwd()} — truyền -p <slug>`);
+async function resolveProject(): Promise<Project> {
+  if (opts.project) return store.findProject(opts.project);
+  const cwd = process.cwd();
+  const p = await store.findProjectFor(detectRemote(cwd), cwd);
+  if (!p) throw new Error(`Không nhận ra project từ ${cwd} — truyền -p <slug>`);
   return p;
-};
+}
 
 const readContent = (arg: string | undefined): string | undefined => {
   if (arg !== undefined) return arg;
@@ -97,38 +92,42 @@ const printHit = (h: SearchHit) => {
   console.log();
 };
 
-function run(): void {
+async function run(): Promise<void> {
   switch (cmd) {
     case "projects": {
-      const list = listProjects();
+      const list = await store.listProjects();
       if (list.length === 0) return console.log("(chưa có project)");
-      for (const p of list) console.log(`${p.slug.padEnd(16)} ${String(p.entryCount).padStart(4)} entries  ${p.path ?? ""}`);
+      for (const p of list)
+        console.log(`${p.slug.padEnd(16)} ${String(p.entryCount).padStart(4)} entries  ${(p.remote ?? "-").padEnd(42)} ${p.path ?? ""}`);
       return;
     }
     case "show": {
-      const p = resolveProject();
+      const p = await resolveProject();
       const type = opts.type ? SectionType.parse(opts.type) : undefined;
-      return console.log(renderTree(p, getTree(p.id, type)));
+      return console.log(renderTree(p, await store.getTree(p, type)));
     }
     case "get": {
-      const e = getEntry(toId(args[0]));
+      const e = await store.getEntry(toId(args[0]));
       printHit(e);
       return console.log(`created ${e.createdAt} · updated ${e.updatedAt}`);
     }
     case "search": {
       const q = args.join(" ");
-      const p = opts.project ? findProject(opts.project) : undefined;
-      const hits = searchEntries(q, p?.id);
+      const p = opts.project ? await store.findProject(opts.project) : undefined;
+      const hits = await store.searchEntries(q, p);
       if (hits.length === 0) return console.log("(không có kết quả)");
       return hits.forEach(printHit);
     }
     case "add-project": {
-      const p = addProject({ slug: args[0] ?? "", name: args[1] ?? "", path: opts.path });
+      // Dò remote + realpath ở máy đang chạy CLI (máy chủ không thấy được đĩa của máy khác).
+      const path = opts.path && existsSync(opts.path) ? realpathSync(opts.path) : opts.path;
+      const remote = path ? detectRemote(path) : undefined;
+      const p = await store.addProject({ slug: args[0] ?? "", name: args[1] ?? "", path, remote });
       return console.log(`ok project ${p.slug} (id ${p.id})`);
     }
     case "add-section": {
-      const p = resolveProject();
-      const id = addSection({
+      const p = await resolveProject();
+      const id = await store.addSection({
         projectId: p.id,
         parentId: opts.parent ? toId(opts.parent) : undefined,
         title: args[0] ?? "",
@@ -137,7 +136,7 @@ function run(): void {
       return console.log(`ok s${id}`);
     }
     case "add": {
-      const id = addEntry({
+      const id = await store.addEntry({
         sectionId: toId(args[0]),
         content: readContent(args[1]) ?? "",
         refFile: opts.ref,
@@ -147,17 +146,23 @@ function run(): void {
     }
     case "update": {
       const id = toId(args[0]);
-      updateEntry(id, { content: readContent(args[1]), refFile: opts.ref, tags: parseTags(opts.tags) });
+      await store.updateEntry(id, { content: readContent(args[1]), refFile: opts.ref, tags: parseTags(opts.tags) });
       return console.log(`ok e${id}`);
+    }
+    case "backfill-remote": {
+      const results = await store.backfillRemotes();
+      if (results.length === 0) return console.log("(không có project nào cần backfill)");
+      for (const r of results) console.log(`${r.slug.padEnd(16)} ${r.remote ? `ok ${r.remote}` : `skip: ${r.skipped}`}`);
+      return;
     }
     case "del": {
       const id = toId(args[0]);
-      deleteEntry(id);
+      await store.deleteEntry(id);
       return console.log(`ok deleted e${id}`);
     }
     case "del-section": {
       const id = toId(args[0]);
-      deleteSection(id);
+      await store.deleteSection(id);
       return console.log(`ok deleted s${id}`);
     }
     default:
@@ -167,9 +172,8 @@ function run(): void {
 }
 
 try {
-  run();
+  await run();
 } catch (err) {
-  const msg = err instanceof ZodError ? err.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("\n") : String((err as Error).message ?? err);
-  console.error(`ERROR: ${msg}`);
+  console.error(`ERROR: ${formatError(err)}`);
   process.exitCode = 1;
 }
