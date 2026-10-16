@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SECTION_TYPES = ["pattern", "decision", "pitfall", "process", "preference", "note"] as const;
+export const SECTION_TYPES = ["pattern", "decision", "pitfall", "process", "preference", "note", "todo"] as const;
 export const SectionType = z.enum(SECTION_TYPES);
 export type SectionType = z.infer<typeof SectionType>;
 

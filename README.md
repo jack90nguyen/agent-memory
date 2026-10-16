@@ -132,7 +132,7 @@ node /Users/jack/Source/Sources/agent-memory/src/cli.ts <command>
 | `update <eN>` · `del <eN>` · `del-section <sN>` | Sửa / xoá |
 | `backfill-remote` | Gán git remote cho project cũ (chỉ chạy trên máy chủ) |
 
-Type: `pattern` · `decision` · `pitfall` · `process` · `preference` · `note`.
+Type: `pattern` · `decision` · `pitfall` · `process` · `preference` · `note` · `todo`.
 Không truyền `-p` → tự nhận project của thư mục hiện tại: **git remote** trước, rồi tới **path**.
 Quy ước ghi (entry = 1 ý, khi nào cần xin phép…) xem trong [SKILL.md](skills/agent-memory/SKILL.md).
 

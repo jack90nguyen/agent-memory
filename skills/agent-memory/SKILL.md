@@ -1,6 +1,6 @@
 ---
 name: agent-memory
-description: Kiến thức code/project (pattern, quyết định kỹ thuật, pitfall, quy trình, domain knowledge) lưu trong SQLite local — thay cho file MEMORY.md trong từng repo. Dùng khi cần đọc/ghi "memory của project", "pattern đã dùng", "lưu ý của repo", "ghi lại pattern này", hoặc trước khi làm task trong 1 project đã đăng ký.
+description: Kiến thức code/project (pattern, quyết định kỹ thuật, pitfall, quy trình, domain knowledge, todo việc cần làm) lưu trong SQLite local — thay cho file MEMORY.md trong từng repo. Dùng khi cần đọc/ghi "memory của project", "pattern đã dùng", "lưu ý của repo", "ghi lại pattern này", hoặc trước khi làm task trong 1 project đã đăng ký.
 ---
 
 # Project Memory (`pmem`)
@@ -47,7 +47,9 @@ project
          └─ entry
 ```
 
-- `type` gắn ở **section**: `pattern | decision | pitfall | process | preference | note`
+- `type` gắn ở **section**: `pattern | decision | pitfall | process | preference | note | todo`
+- **Todo** (việc cần làm của project): ghi vào section type `todo` của project đó (chưa có thì tạo section `Todo`).
+  Mỗi việc 1 entry dạng `- [ ] việc cần làm` (dashboard hiện checkbox). Làm xong → xoá entry (`del`), theo plan như mọi lệnh xoá.
 - **Entry = 1 ý**: 1 bullet (kèm sub-bullet / code block của chính nó), hoặc 1 đoạn văn / bảng / code block độc lập.
   Không nhồi nhiều ý không liên quan vào 1 entry.
 - `content` là markdown nguyên khối — bullet thì giữ luôn `- ` đầu dòng.

@@ -4,6 +4,7 @@
   --surface: #ffffff;
   --surface-2: #f0efec;
   --text-strong: #0c0a09;
+  --project: #0e7490;
   --text: #3f3a36;
   --muted: #8a837d;
   --border: #e7e5e4;
@@ -18,6 +19,7 @@
   --t-process: #16a34a;
   --t-preference: #d97706;
   --t-note: #78716c;
+  --t-todo: #db2777;
 
   color-scheme: light dark;
   font: 14px/1.65 "Space Mono", ui-monospace, Menlo, monospace;
@@ -31,6 +33,7 @@
     --surface: #17171a;
     --surface-2: #222226;
     --text-strong: #ffffff;
+    --project: #22d3ee;
     --text: #b4b4be;
     --muted: #7a7a84;
     --border: #2a2a30;
@@ -42,6 +45,7 @@
     --t-process: #4ade80;
     --t-preference: #fbbf24;
     --t-note: #a8a29e;
+    --t-todo: #f472b6;
   }
 }
 
@@ -80,7 +84,7 @@ button { font: inherit; color: inherit; }
   text-align: left;
   cursor: pointer;
 }
-.project-switch .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-switch .name { color: var(--project); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-switch .chev-down { flex: none; margin-left: auto; color: var(--muted); }
 .pill {
   flex: none;
@@ -178,6 +182,7 @@ main {
 .t-process { --c: var(--t-process); }
 .t-preference { --c: var(--t-preference); }
 .t-note { --c: var(--t-note); }
+.t-todo { --c: var(--t-todo); }
 
 .badge {
   flex: none;
@@ -330,6 +335,8 @@ main {
 .md li > ul, .md li > ol { margin: 4px 0 0; }
 .md strong { color: var(--text-strong); font-weight: 700; }
 .md a { color: var(--accent); }
+.md li.task-list-item { list-style: none; }
+.md li.task-list-item input { margin: 0 6px 0 -1.3em; accent-color: var(--t-todo); }
 .md code {
   padding: 1px 5px;
   border-radius: 5px;
@@ -378,8 +385,8 @@ main {
   text-align: left;
   cursor: pointer;
 }
-.hit-group-head .name { color: var(--text-strong); font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
-.hit-group-head:hover .name { color: var(--accent); }
+.hit-group-head .name { color: var(--project); font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.hit-group-head:hover .name { color: var(--text-strong); }
 .hit-group-head .muted { flex: none; font-size: 12px; }
 .hit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .hit-section { min-width: 0; color: var(--text-strong); font-size: 16px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
@@ -480,7 +487,7 @@ main {
 
   main { padding: 22px 32px 56px; }
   .project-title { margin-bottom: 14px; }
-  .project-title h1 { margin: 0 0 2px; color: var(--text-strong); font-size: 24px; letter-spacing: -0.02em; }
+  .project-title h1 { margin: 0 0 2px; color: var(--project); font-size: 24px; letter-spacing: -0.02em; }
   .project-title .muted { font-size: 13px; }
   .sec-id { display: inline; }
 
