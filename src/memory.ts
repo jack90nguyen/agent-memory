@@ -5,6 +5,7 @@ import {
   EntryInput,
   EntryPatch,
   ProjectInput,
+  ProjectOrder,
   SectionInput,
   type Entry,
   type Project,
@@ -70,7 +71,7 @@ export function listProjects(): ProjectSummary[] {
     .prepare(
       `SELECT p.*, (SELECT count(*) FROM entries e JOIN sections s ON s.id = e.section_id
                     WHERE s.project_id = p.id) AS entry_count
-       FROM projects p ORDER BY p.slug`,
+       FROM projects p ORDER BY p.position, p.slug`,
     )
     .all() as (ProjectRow & { entry_count: number })[];
   return rows.map((r) => ({ ...toProject(r), entryCount: r.entry_count }));
@@ -110,9 +111,22 @@ export function addProject(input: ProjectInput): Project {
   const remote = p.remote ? normalizeRemote(p.remote) : path ? detectRemote(path) : undefined;
   if (remote) assertRemoteFree(remote);
   const { lastInsertRowid } = db
-    .prepare("INSERT INTO projects (slug, name, path, remote) VALUES (?, ?, ?, ?)")
+    .prepare(
+      `INSERT INTO projects (slug, name, path, remote, position)
+       VALUES (?, ?, ?, ?, (SELECT coalesce(max(position), 0) + 1 FROM projects))`,
+    )
     .run(p.slug, p.name, path ?? null, remote ?? null);
   return toProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(lastInsertRowid) as ProjectRow);
+}
+
+/** Ghi thứ tự project theo danh sách slug — phải đủ mọi project, kẻo lệch với danh sách vừa bị đổi ở chỗ khác. */
+export function reorderProjects(input: ProjectOrder): void {
+  const { slugs } = ProjectOrder.parse(input);
+  const known = (db.prepare("SELECT slug FROM projects").all() as { slug: string }[]).map((r) => r.slug);
+  if (slugs.length !== known.length || new Set(slugs).size !== slugs.length || !slugs.every((s) => known.includes(s)))
+    throw new Error("Danh sách project đã thay đổi — tải lại trang rồi thử lại");
+  const update = db.prepare("UPDATE projects SET position = ? WHERE slug = ?");
+  db.transaction(() => slugs.forEach((slug, i) => update.run(i + 1, slug)))();
 }
 
 export type BackfillResult = { slug: string; remote?: string; skipped?: string };

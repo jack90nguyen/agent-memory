@@ -13,6 +13,7 @@ import {
   getEntry,
   getTree,
   listProjects,
+  reorderProjects,
   searchEntries,
   updateEntry,
 } from "./memory.ts";
@@ -52,6 +53,11 @@ app.get("/api/search", (c) => {
 // ---------- ghi (không auth: chỉ truy cập được trong tailnet / localhost) ----------
 
 app.post("/api/projects", async (c) => c.json(addProject(await c.req.json())));
+
+app.put("/api/projects/order", async (c) => {
+  reorderProjects(await c.req.json());
+  return c.json({ ok: true });
+});
 
 app.post("/api/sections", async (c) => c.json({ id: addSection(await c.req.json()) }));
 

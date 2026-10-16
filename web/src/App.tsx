@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ProjectSummary } from "../../src/schema.ts";
-import { fetchProjects } from "./api.ts";
+import { fetchProjects, saveProjectOrder } from "./api.ts";
 import { ProjectSheet } from "./ProjectSheet.tsx";
 import { ProjectView } from "./ProjectView.tsx";
 import { SearchView } from "./SearchView.tsx";
@@ -12,6 +12,16 @@ function parseHash(): Route {
   const [slug = "", target] = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/");
   const entryId = Number(target?.replace(/^e/, ""));
   return { slug, entryId: entryId > 0 ? entryId : undefined };
+}
+
+type DropTarget = { slug: string; after: boolean };
+
+/** Đưa `from` tới trước/sau `target`. */
+function moveProject(list: ProjectSummary[], from: string, { slug, after }: DropTarget): ProjectSummary[] {
+  const moving = list.find((p) => p.slug === from)!;
+  const rest = list.filter((p) => p.slug !== from);
+  const at = rest.findIndex((p) => p.slug === slug) + (after ? 1 : 0);
+  return [...rest.slice(0, at), moving, ...rest.slice(at)];
 }
 
 const goTo = (slug: string, entryId?: number) => {
@@ -35,6 +45,8 @@ export function App() {
   const [query, setQuery] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [error, setError] = useState("");
+  const [dragSlug, setDragSlug] = useState<string>();
+  const [drop, setDrop] = useState<DropTarget>();
   const isMobile = useMediaQuery("(max-width: 719px)");
   const headerRef = useRef<HTMLElement>(null);
 
@@ -63,6 +75,29 @@ export function App() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  const refreshProjects = () =>
+    fetchProjects()
+      .then(setProjects)
+      .catch((e: Error) => setError(e.message));
+
+  const endDrag = () => {
+    setDragSlug(undefined);
+    setDrop(undefined);
+  };
+
+  const dropProject = () => {
+    if (dragSlug && drop && drop.slug !== dragSlug) {
+      const prev = projects;
+      const next = moveProject(projects, dragSlug, drop);
+      setProjects(next);
+      saveProjectOrder(next.map((p) => p.slug)).catch((e: Error) => {
+        setProjects(prev);
+        setError(`Không lưu được thứ tự: ${e.message}`);
+      });
+    }
+    endDrag();
+  };
 
   const current = projects.find((p) => p.slug === route.slug);
   const pick = (slug: string) => {
@@ -103,8 +138,32 @@ export function App() {
             <a
               key={p.id}
               href={`#/${p.slug}`}
-              className={!query && p.slug === route.slug ? "active" : ""}
+              className={[
+                !query && p.slug === route.slug && "active",
+                p.slug === dragSlug && "dragging",
+                drop?.slug === p.slug && p.slug !== dragSlug && (drop.after ? "drop-after" : "drop-before"),
+              ]
+                .filter(Boolean)
+                .join(" ")}
               onClick={() => setQuery("")}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", p.slug);
+                setDragSlug(p.slug);
+              }}
+              onDragOver={(e) => {
+                if (!dragSlug) return; // không phải kéo project (vd kéo file vào)
+                e.preventDefault();
+                const box = e.currentTarget.getBoundingClientRect();
+                const after = e.clientY > box.top + box.height / 2;
+                if (drop?.slug !== p.slug || drop.after !== after) setDrop({ slug: p.slug, after });
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropProject();
+              }}
+              onDragEnd={endDrag}
             >
               <span className="name">{p.name}</span>
               <span className={`count ${p.entryCount === 0 ? "zero" : ""}`}>{p.entryCount}</span>
@@ -116,7 +175,12 @@ export function App() {
       <main>
         {error && <p className="error">{error}</p>}
         {query.trim() ? (
-          <SearchView query={query} onPick={(h) => goTo(h.projectSlug, h.id)} />
+          <SearchView
+            query={query}
+            projects={projects}
+            onPick={(h) => goTo(h.projectSlug, h.id)}
+            onPickProject={pick}
+          />
         ) : (
           route.slug && (
             <ProjectView
@@ -125,6 +189,7 @@ export function App() {
               project={current}
               focusId={route.entryId}
               isMobile={isMobile}
+              onChanged={refreshProjects}
             />
           )
         )}

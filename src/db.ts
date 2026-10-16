@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name       TEXT NOT NULL,
   path       TEXT UNIQUE,
   remote     TEXT,
+  position   INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -88,6 +89,12 @@ END;
 const projectCols = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
 if (!projectCols.some((c) => c.name === "remote")) db.exec("ALTER TABLE projects ADD COLUMN remote TEXT");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_remote ON projects(remote)");
+
+// Migration: thứ tự project (kéo thả trên sidebar). Lần đầu giữ nguyên thứ tự slug cũ.
+if (!projectCols.some((c) => c.name === "position")) {
+  db.exec(`ALTER TABLE projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+    UPDATE projects SET position = (SELECT count(*) FROM projects p2 WHERE p2.slug <= projects.slug);`);
+}
 
 export function foldText(text: string): string {
   return text.replaceAll("đ", "d").replaceAll("Đ", "D");
