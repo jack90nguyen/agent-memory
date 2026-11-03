@@ -1,4 +1,4 @@
-import type { ProjectSummary, SearchHit, Section, SectionType } from "../../src/schema.ts";
+import type { Project, ProjectSummary, SearchHit, Section, SectionType } from "../../src/schema.ts";
 
 async function get<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -20,6 +20,15 @@ export const saveProjectOrder = (slugs: string[]) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ slugs }),
   });
+
+export const renameProject = (slug: string, name: string) =>
+  get<Project>(`/api/projects/${slug}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+
+export const deleteProject = (slug: string) => get<{ ok: true }>(`/api/projects/${slug}`, { method: "DELETE" });
 
 export const deleteEntry = (id: number) => get<{ ok: true }>(`/api/entries/${id}`, { method: "DELETE" });
 

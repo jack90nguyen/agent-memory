@@ -7,12 +7,14 @@ import {
   addProject,
   addSection,
   deleteEntry,
+  deleteProject,
   deleteSection,
   findProject,
   findProjectFor,
   getEntry,
   getTree,
   listProjects,
+  renameProject,
   reorderProjects,
   searchEntries,
   updateEntry,
@@ -53,6 +55,13 @@ app.get("/api/search", (c) => {
 // ---------- ghi (không auth: chỉ truy cập được trong tailnet / localhost) ----------
 
 app.post("/api/projects", async (c) => c.json(addProject(await c.req.json())));
+
+app.patch("/api/projects/:slug", async (c) => c.json(renameProject(c.req.param("slug"), await c.req.json())));
+
+app.delete("/api/projects/:slug", (c) => {
+  deleteProject(c.req.param("slug"));
+  return c.json({ ok: true });
+});
 
 app.put("/api/projects/order", async (c) => {
   reorderProjects(await c.req.json());

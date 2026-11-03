@@ -6,6 +6,7 @@ import {
   EntryPatch,
   ProjectInput,
   ProjectOrder,
+  ProjectPatch,
   SectionInput,
   type Entry,
   type Project,
@@ -117,6 +118,19 @@ export function addProject(input: ProjectInput): Project {
     )
     .run(p.slug, p.name, path ?? null, remote ?? null);
   return toProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(lastInsertRowid) as ProjectRow);
+}
+
+/** Chỉ đổi tên hiển thị — slug nằm trong URL, `-p slug` của CLI và memory của agent nên giữ nguyên. */
+export function renameProject(slug: string, input: ProjectPatch): Project {
+  const { name } = ProjectPatch.parse(input);
+  const p = findProject(slug);
+  db.prepare("UPDATE projects SET name = ? WHERE id = ?").run(name, p.id);
+  return { ...p, name };
+}
+
+/** Xoá project kèm toàn bộ section + entry (ON DELETE CASCADE, trigger dọn FTS). */
+export function deleteProject(slug: string): void {
+  db.prepare("DELETE FROM projects WHERE id = ?").run(findProject(slug).id);
 }
 
 /** Ghi thứ tự project theo danh sách slug — phải đủ mọi project, kẻo lệch với danh sách vừa bị đổi ở chỗ khác. */

@@ -1,52 +1,51 @@
 /* ---------- tokens ---------- */
+/* Theme: <html data-theme="light|dark"> do App.tsx gắn (cả chế độ theo hệ thống) — không dùng light-dark() trong
+   custom property vì WebKit/Safari resolve nó theo hệ thống, bỏ qua color-scheme ép từ JS. */
 :root {
-  --bg: #f6f6f4;
+  color-scheme: light;
+  --bg: #eeede9;
   --surface: #ffffff;
-  --surface-2: #f0efec;
+  --surface-2: #f3f2ef;
   --text-strong: #0c0a09;
   --project: #0e7490;
-  --text: #3f3a36;
-  --muted: #8a837d;
-  --border: #e7e5e4;
+  --text: #292524;
+  --muted: #6b6560;
+  --border: #dedbd6;
   --accent: #4f46e5;
+  --t-pattern: #2563eb;
+  --t-decision: #7c3aed;
+  --t-pitfall: #dc2626;
+  --t-process: #15803d;
+  --t-preference: #b45309;
+  --t-note: #78716c;
+  --t-todo: #db2777;
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --radius: 14px;
   --header-h: 0px;
 
-  --t-pattern: #2563eb;
-  --t-decision: #7c3aed;
-  --t-pitfall: #dc2626;
-  --t-process: #16a34a;
-  --t-preference: #d97706;
-  --t-note: #78716c;
-  --t-todo: #db2777;
-
-  color-scheme: light dark;
   font: 14px/1.65 "Space Mono", ui-monospace, Menlo, monospace;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0c0c0e;
-    --surface: #17171a;
-    --surface-2: #222226;
-    --text-strong: #ffffff;
-    --project: #22d3ee;
-    --text: #b4b4be;
-    --muted: #7a7a84;
-    --border: #2a2a30;
-    --accent: #8b93ff;
-
-    --t-pattern: #60a5fa;
-    --t-decision: #a78bfa;
-    --t-pitfall: #f87171;
-    --t-process: #4ade80;
-    --t-preference: #fbbf24;
-    --t-note: #a8a29e;
-    --t-todo: #f472b6;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c0c0e;
+  --surface: #17171a;
+  --surface-2: #222226;
+  --text-strong: #ffffff;
+  --project: #22d3ee;
+  --text: #b4b4be;
+  --muted: #7a7a84;
+  --border: #2a2a30;
+  --accent: #8b93ff;
+  --t-pattern: #60a5fa;
+  --t-decision: #a78bfa;
+  --t-pitfall: #f87171;
+  --t-process: #4ade80;
+  --t-preference: #fbbf24;
+  --t-note: #a8a29e;
+  --t-todo: #f472b6;
 }
 
 * { box-sizing: border-box; }
@@ -68,6 +67,23 @@ button { font: inherit; color: inherit; }
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
+
+.topbar-row { display: flex; align-items: center; gap: 4px; }
+.topbar-row .project-switch { flex: 1; min-width: 0; }
+.theme-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 17px;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--accent); }
 
 .project-switch {
   color: var(--text-strong);
@@ -252,6 +268,8 @@ main {
 
 /* ---------- entries ---------- */
 .entry {
+  display: flex;
+  flex-direction: column;
   padding: 12px 14px;
   scroll-margin-top: calc(var(--header-h) + 64px);
 }
@@ -272,11 +290,14 @@ main {
   color: var(--muted);
   font-size: 12px;
 }
+.entry-body { min-width: 0; }
+.entry-side { flex-wrap: nowrap; justify-content: flex-end; white-space: nowrap; }
+.md { max-width: 100ch; } /* ~100 ký tự/dòng — đỡ lia mắt trên màn rộng */
 .meta code { padding: 0 5px; border-radius: 4px; background: var(--surface-2); font-size: 11.5px; overflow-wrap: anywhere; }
 .tag { color: var(--accent); }
 
-/* ---------- xoá ---------- */
-.trash {
+/* ---------- icon button (sửa / xoá) ---------- */
+.icon-btn {
   display: grid;
   flex: none;
   place-items: center;
@@ -291,13 +312,21 @@ main {
   cursor: pointer;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
 }
-.trash:hover, .trash:focus-visible { opacity: 1; color: var(--t-pitfall); background: color-mix(in srgb, var(--t-pitfall) 12%, transparent); }
-.meta .trash { width: 28px; height: 28px; margin: -4px -6px -4px auto; }
-/* chuột: chỉ hiện khi rê vào entry / header; cảm ứng: luôn hiện (mờ) */
-@media (hover: hover) {
-  .trash { opacity: 0; }
-  .entry:hover .meta .trash, .sec-head:hover > .trash { opacity: 0.6; }
+.icon-btn:hover, .icon-btn:focus-visible { opacity: 1; color: var(--accent); background: var(--accent-soft); }
+.icon-btn.danger:hover, .icon-btn.danger:focus-visible { color: var(--t-pitfall); background: color-mix(in srgb, var(--t-pitfall) 12%, transparent); }
+.meta .icon-btn { width: 28px; height: 28px; margin: -4px -6px -4px 0; }
+/* Nút xoá entry/section: mobile luôn hiện (mờ); desktop chỉ hiện khi rê vào — theo bề rộng, không theo hover,
+   vì xem bản mobile trên máy có chuột (cửa sổ hẹp, remote) thì hover vẫn = true. */
+@media (min-width: 720px) {
+  .entry .icon-btn, .sec-head > .icon-btn { opacity: 0; }
+  .entry:hover .icon-btn, .sec-head:hover > .icon-btn { opacity: 0.6; }
 }
+
+.project-head { display: flex; align-items: center; gap: 8px; }
+.project-info { min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-actions { display: flex; flex: none; gap: 2px; margin-left: auto; }
+.project-actions .icon-btn { opacity: 0.7; }
+.project-title { margin-bottom: 10px; }
 
 .confirm-title { padding: 0 4px 8px; color: var(--text-strong); font-size: 17px; }
 .confirm-body { padding: 0 4px; }
@@ -312,6 +341,9 @@ main {
 }
 .confirm-section { color: var(--text-strong); font-weight: 700; }
 .confirm .error { margin: 10px 4px 0; }
+.confirm-body .field { margin: 4px 0 8px; }
+.confirm-body code { padding: 0 4px; border-radius: 4px; background: var(--surface-2); color: var(--text-strong); }
+.confirm-hint { font-size: 12.5px; }
 .confirm-actions { display: flex; gap: 10px; margin-top: 16px; }
 .btn {
   flex: 1;
@@ -323,6 +355,7 @@ main {
   cursor: pointer;
 }
 .btn:disabled { opacity: 0.6; cursor: default; }
+.btn.primary { border-color: transparent; background: var(--accent); color: var(--bg); }
 .btn.danger { border-color: transparent; background: #dc2626; color: #fff; }
 
 /* ---------- markdown ---------- */
@@ -460,6 +493,13 @@ main {
   .topbar { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 20px; padding: 12px 24px; }
   .brand { color: var(--text-strong); font-size: 17px; font-weight: 700; white-space: nowrap; }
   .search { flex: 1; max-width: 560px; }
+  .theme-toggle { margin-left: auto; }
+
+  .entry { flex-direction: row; align-items: flex-start; gap: 16px; }
+  .entry-body { flex: 1; }
+  .entry-side { flex: none; margin-top: 2px; }
+  .project-head h1 { min-width: 0; }
+  .project-actions { margin-left: 6px; }
 
   .sidebar {
     position: sticky;

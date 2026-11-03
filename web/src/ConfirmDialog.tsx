@@ -1,15 +1,19 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 type Props = {
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  /** `danger`: nút đỏ (xoá) · `primary`: nút accent (lưu). */
+  tone?: "danger" | "primary";
+  /** false → khoá nút xác nhận (vd chưa gõ đúng slug). */
+  canConfirm?: boolean;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
-/** Hộp xác nhận thao tác nguy hiểm: bottom sheet trên mobile, modal giữa màn hình trên desktop. */
-export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onClose }: Props) {
+/** Hộp xác nhận: bottom sheet trên mobile, modal giữa màn hình trên desktop. Enter trong ô nhập = xác nhận. */
+export function ConfirmDialog({ title, children, confirmLabel, tone = "danger", canConfirm = true, onConfirm, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -24,7 +28,9 @@ export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onClos
     };
   }, [onClose]);
 
-  const confirm = () => {
+  const confirm = (e: FormEvent) => {
+    e.preventDefault();
+    if (!canConfirm || busy) return;
     setBusy(true);
     setError("");
     onConfirm().catch((e: Error) => {
@@ -35,20 +41,27 @@ export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onClos
 
   return (
     <div className="sheet-backdrop confirm-backdrop" onClick={busy ? undefined : onClose}>
-      <div className="sheet confirm" role="alertdialog" aria-modal aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <form
+        className="sheet confirm"
+        role="alertdialog"
+        aria-modal
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={confirm}
+      >
         <div className="sheet-grip" />
         <strong className="confirm-title">{title}</strong>
         <div className="confirm-body">{children}</div>
         {error && <p className="error">{error}</p>}
         <div className="confirm-actions">
-          <button className="btn" onClick={onClose} disabled={busy} autoFocus>
+          <button type="button" className="btn" onClick={onClose} disabled={busy} autoFocus={tone === "danger"}>
             Huỷ
           </button>
-          <button className="btn danger" onClick={confirm} disabled={busy}>
-            {busy ? "Đang xoá…" : confirmLabel}
+          <button type="submit" className={`btn ${tone}`} disabled={busy || !canConfirm}>
+            {busy ? "Đang xử lý…" : confirmLabel}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

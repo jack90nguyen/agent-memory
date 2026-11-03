@@ -14,6 +14,26 @@ function parseHash(): Route {
   return { slug, entryId: entryId > 0 ? entryId : undefined };
 }
 
+type Theme = "system" | "light" | "dark";
+const THEMES: Theme[] = ["system", "light", "dark"];
+const THEME_ICON: Record<Theme, string> = { system: "🌓", light: "☀️", dark: "🌙" };
+const THEME_LABEL: Record<Theme, string> = { system: "Theo hệ thống", light: "Sáng", dark: "Tối" };
+const THEME_BG = { light: "#eeede9", dark: "#0c0c0e" }; // khớp --bg, cho thanh trình duyệt
+
+const readTheme = (): Theme => {
+  const t = localStorage.getItem("theme");
+  return t === "light" || t === "dark" ? t : "system";
+};
+
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+
+/** Gắn data-theme đã resolve lên <html> (CSS chỉ đọc attribute này), đồng bộ thanh trình duyệt. */
+function applyTheme(theme: Theme) {
+  const resolved = theme === "system" ? (darkQuery.matches ? "dark" : "light") : theme;
+  document.documentElement.dataset.theme = resolved;
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = THEME_BG[resolved];
+}
+
 type DropTarget = { slug: string; after: boolean };
 
 /** Đưa `from` tới trước/sau `target`. */
@@ -47,6 +67,7 @@ export function App() {
   const [error, setError] = useState("");
   const [dragSlug, setDragSlug] = useState<string>();
   const [drop, setDrop] = useState<DropTarget>();
+  const [theme, setTheme] = useState(readTheme);
   const isMobile = useMediaQuery("(max-width: 719px)");
   const headerRef = useRef<HTMLElement>(null);
 
@@ -81,6 +102,38 @@ export function App() {
       .then(setProjects)
       .catch((e: Error) => setError(e.message));
 
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== "system") {
+      localStorage.setItem("theme", theme);
+      return;
+    }
+    localStorage.removeItem("theme");
+    const onChange = () => applyTheme("system");
+    darkQuery.addEventListener("change", onChange);
+    return () => darkQuery.removeEventListener("change", onChange);
+  }, [theme]);
+
+  const themeButton = (
+    <button
+      className="theme-toggle"
+      title={`Giao diện: ${THEME_LABEL[theme]}`}
+      aria-label={`Giao diện: ${THEME_LABEL[theme]}, bấm để đổi`}
+      onClick={() => setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length])}
+    >
+      {THEME_ICON[theme]}
+    </button>
+  );
+
+  const afterProjectDeleted = () =>
+    fetchProjects()
+      .then((list) => {
+        setProjects(list);
+        const first = list.find((p) => p.entryCount > 0) ?? list[0];
+        location.hash = first ? `/${first.slug}` : "";
+      })
+      .catch((e: Error) => setError(e.message));
+
   const endDrag = () => {
     setDragSlug(undefined);
     setDrop(undefined);
@@ -110,12 +163,15 @@ export function App() {
     <div className="layout">
       <header ref={headerRef} className="topbar">
         {isMobile ? (
-          <button className="project-switch" onClick={() => setSheetOpen(true)}>
-            <span aria-hidden>🧠</span>
-            <span className="name">{current?.name ?? "Chọn project"}</span>
-            {current && <span className="pill">{current.entryCount}</span>}
-            <ChevronDown />
-          </button>
+          <div className="topbar-row">
+            <button className="project-switch" onClick={() => setSheetOpen(true)}>
+              <span aria-hidden>🧠</span>
+              <span className="name">{current?.name ?? "Chọn project"}</span>
+              {current && <span className="pill">{current.entryCount}</span>}
+              <ChevronDown />
+            </button>
+            {themeButton}
+          </div>
         ) : (
           <div className="brand">🧠 Agent Memory</div>
         )}
@@ -130,6 +186,7 @@ export function App() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
+        {!isMobile && themeButton}
       </header>
 
       {!isMobile && (
@@ -190,6 +247,7 @@ export function App() {
               focusId={route.entryId}
               isMobile={isMobile}
               onChanged={refreshProjects}
+              onProjectDeleted={afterProjectDeleted}
             />
           )
         )}

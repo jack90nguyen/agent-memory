@@ -15,6 +15,9 @@ export const ProjectInput = z.object({
 });
 export type ProjectInput = z.infer<typeof ProjectInput>;
 
+export const ProjectPatch = ProjectInput.pick({ name: true });
+export type ProjectPatch = z.infer<typeof ProjectPatch>;
+
 export const ProjectOrder = z.object({ slugs: z.array(z.string().min(1)).min(1) });
 export type ProjectOrder = z.infer<typeof ProjectOrder>;
 

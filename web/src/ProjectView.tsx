@@ -8,7 +8,7 @@ import {
   type Section,
   type SectionType,
 } from "../../src/schema.ts";
-import { deleteEntry, deleteSection, fetchTree } from "./api.ts";
+import { deleteEntry, deleteProject, deleteSection, fetchTree, renameProject } from "./api.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 
 type Props = {
@@ -16,8 +16,9 @@ type Props = {
   project?: ProjectSummary;
   focusId?: number;
   isMobile: boolean;
-  /** Gọi sau khi xoá, để App cập nhật số entry của project. */
+  /** Gọi sau khi xoá / đổi tên, để App cập nhật sidebar. */
   onChanged: () => void;
+  onProjectDeleted: () => void;
 };
 
 type DeleteTarget = { kind: "entry"; entry: Entry } | { kind: "section"; section: Section };
@@ -37,13 +38,14 @@ function findPath(tree: Section[], entryId: number): number[] | undefined {
   }
 }
 
-export function ProjectView({ slug, project, focusId, isMobile, onChanged }: Props) {
+export function ProjectView({ slug, project, focusId, isMobile, onChanged, onProjectDeleted }: Props) {
   const [type, setType] = useState<SectionType>();
   const [tree, setTree] = useState<Section[]>();
   const [open, setOpen] = useState<Set<number>>();
   const [flashId, setFlashId] = useState<number>();
   const [error, setError] = useState("");
   const [pending, setPending] = useState<DeleteTarget>();
+  const [projectAction, setProjectAction] = useState<"rename" | "delete">();
   const [version, setVersion] = useState(0); // tăng lên → tải lại tree
   const handledFocus = useRef<number>(undefined);
   const scrolledTo = useRef<number>(undefined);
@@ -111,12 +113,21 @@ export function ProjectView({ slug, project, focusId, isMobile, onChanged }: Pro
 
   return (
     <div className="project-view">
-      {!isMobile && project && (
+      {project && (
         <div className="project-title">
-          <h1>{project.name}</h1>
-          <span className="muted">
-            {[`${project.entryCount} entries`, project.remote, project.path].filter(Boolean).join(" · ")}
-          </span>
+          <div className="project-head">
+            {!isMobile && <h1>{project.name}</h1>}
+            {isMobile && <ProjectInfo project={project} />}
+            <span className="project-actions">
+              <IconButton label="Đổi tên project" onClick={() => setProjectAction("rename")}>
+                <PencilIcon />
+              </IconButton>
+              <IconButton label="Xoá project" danger onClick={() => setProjectAction("delete")}>
+                <TrashIcon />
+              </IconButton>
+            </span>
+          </div>
+          {!isMobile && <ProjectInfo project={project} />}
         </div>
       )}
 
@@ -150,6 +161,20 @@ export function ProjectView({ slug, project, focusId, isMobile, onChanged }: Pro
         tree?.map((s) => (
           <SectionBlock key={s.id} section={s} open={open} onToggle={toggle} onDelete={setPending} flashId={flashId} />
         ))}
+
+      {project && projectAction === "rename" && (
+        <RenameDialog
+          project={project}
+          onClose={() => setProjectAction(undefined)}
+          onDone={() => {
+            setProjectAction(undefined);
+            onChanged();
+          }}
+        />
+      )}
+      {project && projectAction === "delete" && (
+        <DeleteProjectDialog project={project} onClose={() => setProjectAction(undefined)} onDone={onProjectDeleted} />
+      )}
 
       {pending && (
         <ConfirmDialog
@@ -255,19 +280,36 @@ function timeAgo(s: string): string {
   return "vừa xong";
 }
 
-export function EntryMeta({ entry, children }: { entry: Entry; children?: ReactNode }) {
+/** `e214 · 25 ngày trước` */
+function EntryStamp({ entry }: { entry: Entry }) {
   const fmt = (s: string) => parseUtc(s).toLocaleString("vi-VN");
   return (
-    <div className="meta">
+    <>
       <span>e{entry.id}</span>
       <span title={`Tạo ${fmt(entry.createdAt)} · Sửa ${fmt(entry.updatedAt)}`}>{timeAgo(entry.updatedAt)}</span>
+    </>
+  );
+}
+
+/** ref_file + tags — đọc cùng nội dung nên nằm ngay dưới nó. */
+function EntryRefs({ entry }: { entry: Entry }) {
+  return (
+    <>
       {entry.refFile && <code>{entry.refFile}</code>}
       {entry.tags.map((t) => (
         <span key={t} className="tag">
           #{t}
         </span>
       ))}
-      {children}
+    </>
+  );
+}
+
+export function EntryMeta({ entry }: { entry: Entry }) {
+  return (
+    <div className="meta">
+      <EntryStamp entry={entry} />
+      <EntryRefs entry={entry} />
     </div>
   );
 }
@@ -275,12 +317,20 @@ export function EntryMeta({ entry, children }: { entry: Entry; children?: ReactN
 function EntryItem({ entry, flash, onDelete }: { entry: Entry; flash: boolean; onDelete: OnDelete }) {
   return (
     <article id={`e${entry.id}`} className={`entry ${flash ? "flash" : ""}`}>
-      <div className="md">
-        <EntryMarkdown content={entry.content} />
+      <div className="entry-body">
+        <div className="md">
+          <EntryMarkdown content={entry.content} />
+        </div>
+        {(entry.refFile || entry.tags.length > 0) && (
+          <div className="meta">
+            <EntryRefs entry={entry} />
+          </div>
+        )}
       </div>
-      <EntryMeta entry={entry}>
+      <div className="meta entry-side">
+        <EntryStamp entry={entry} />
         <TrashButton label={`Xoá entry e${entry.id}`} onClick={() => onDelete({ kind: "entry", entry })} />
-      </EntryMeta>
+      </div>
     </article>
   );
 }
@@ -312,10 +362,91 @@ function DeletePreview({ target }: { target: DeleteTarget }) {
   );
 }
 
-const TrashButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
-  <button className="trash" aria-label={label} title={label} onClick={onClick}>
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
-    </svg>
+type IconButtonProps = { label: string; danger?: boolean; onClick: () => void; children: ReactNode };
+
+const IconButton = ({ label, danger, onClick, children }: IconButtonProps) => (
+  <button className={`icon-btn ${danger ? "danger" : ""}`} aria-label={label} title={label} onClick={onClick}>
+    {children}
   </button>
 );
+
+const TrashButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
+  <IconButton label={label} danger onClick={onClick}>
+    <TrashIcon />
+  </IconButton>
+);
+
+const TrashIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+  </svg>
+);
+
+const PencilIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4" />
+  </svg>
+);
+
+const ProjectInfo = ({ project }: { project: ProjectSummary }) => (
+  <span className="muted project-info">
+    {[`${project.entryCount} entries`, project.remote, project.path].filter(Boolean).join(" · ")}
+  </span>
+);
+
+type ProjectDialogProps = { project: ProjectSummary; onClose: () => void; onDone: () => void };
+
+function RenameDialog({ project, onClose, onDone }: ProjectDialogProps) {
+  const [name, setName] = useState(project.name);
+  const trimmed = name.trim();
+  return (
+    <ConfirmDialog
+      title="Đổi tên project"
+      confirmLabel="Lưu"
+      tone="primary"
+      canConfirm={trimmed.length > 0 && trimmed !== project.name}
+      onConfirm={async () => {
+        await renameProject(project.slug, trimmed);
+        onDone();
+      }}
+      onClose={onClose}
+    >
+      <input className="field" value={name} onChange={(e) => setName(e.target.value)} aria-label="Tên project" autoFocus />
+      <p className="muted confirm-hint">
+        Slug <code>{project.slug}</code> giữ nguyên — URL, CLI <code>-p</code> vẫn dùng được.
+      </p>
+    </ConfirmDialog>
+  );
+}
+
+function DeleteProjectDialog({ project, onClose, onDone }: ProjectDialogProps) {
+  const [typed, setTyped] = useState("");
+  return (
+    <ConfirmDialog
+      title={`Xoá project ${project.name}?`}
+      confirmLabel="Xoá project"
+      canConfirm={typed.trim() === project.slug}
+      onConfirm={async () => {
+        await deleteProject(project.slug);
+        onDone();
+      }}
+      onClose={onClose}
+    >
+      <p>
+        Xoá luôn <strong>{project.entryCount} entry</strong> cùng mọi section. Không hoàn tác được.
+      </p>
+      <p className="muted">
+        Gõ <code>{project.slug}</code> để xác nhận:
+      </p>
+      <input
+        className="field"
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+        aria-label="Gõ slug để xác nhận"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+      />
+    </ConfirmDialog>
+  );
+}
