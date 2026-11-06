@@ -59,7 +59,10 @@ project
 
 - `projects` — danh sách project + số entry + remote + path
 - `show [-p slug] [--type T]` — cả project dạng markdown, kèm `[sN]` / `[eN]`. **Đọc cái này trước khi làm task trong project.**
-- `search "<từ khoá>" [-p slug]` — full-text, gõ không dấu được (`duong` khớp `đường`), mỗi từ là prefix
+- `search "<từ khoá>" [-p slug]` — full-text, gõ không dấu được (`duong` khớp `đường`), mỗi từ là prefix.
+  Xếp theo tầng: khớp nguyên cụm → đủ mọi từ → ít nhất 1 từ.
+  Không có ngữ nghĩa: ra ít / lệch ý → **search lại bằng ngôn ngữ kia + từ đồng nghĩa**
+  (kho viết lẫn Việt/Anh: `triển khai` → `deploy`, `phân trang` → `pagination paging`).
 - `get <eN>` — 1 entry + created/updated
 
 ## Lệnh GHI / XOÁ — BẮT BUỘC trình plan chờ user duyệt

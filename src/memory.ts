@@ -281,32 +281,45 @@ export function getTree(projectId: number, type?: SectionType): Section[] {
     .filter((r) => r.entries.length > 0 || r.children.length > 0 || r.type === type);
 }
 
-/** Mỗi từ thành 1 prefix term → user gõ tự do, không dính cú pháp FTS5. */
-function toFtsQuery(q: string): string {
-  return foldText(q)
+/**
+ * Các tầng FTS5 từ chặt → lỏng: cụm liền nhau → đủ mọi từ → ít nhất 1 từ.
+ * Mỗi từ được quote (user gõ tự do, không dính cú pháp FTS5) và là prefix.
+ */
+function toFtsTiers(q: string): string[] {
+  const words = foldText(q)
     .split(/\s+/)
     .filter(Boolean)
-    .map((w) => `"${w.replaceAll('"', '""')}"*`)
-    .join(" ");
+    .map((w) => w.replaceAll('"', '""'));
+  const terms = words.map((w) => `"${w}"*`);
+  if (terms.length <= 1) return terms;
+  return [`"${words.join(" ")}"*`, terms.join(" "), terms.join(" OR ")];
 }
 
+type HitRow = EntryRow & { slug: string; path: string; section_type: SectionType };
+
 export function searchEntries(q: string, projectId?: number, limit = 50): SearchHit[] {
-  const match = toFtsQuery(q);
-  if (!match) return [];
-  const rows = db
-    .prepare(
-      `SELECT e.*, p.slug, sp.path, sp.type AS section_type
-       FROM entries_fts f
-       JOIN entries e ON e.id = f.rowid
-       JOIN section_paths sp ON sp.id = e.section_id
-       JOIN projects p ON p.id = sp.project_id
-       WHERE entries_fts MATCH ? AND (? IS NULL OR p.id = ?)
-       ORDER BY bm25(entries_fts) LIMIT ?`,
-    )
-    .all(match, projectId ?? null, projectId ?? null, limit) as (EntryRow & {
-    slug: string;
-    path: string;
-    section_type: SectionType;
-  })[];
-  return rows.map((r) => ({ ...toEntry(r), projectSlug: r.slug, sectionPath: r.path, sectionType: r.section_type }));
+  // bm25 theo thứ tự cột content, tags, section — khớp ở tags / tiêu đề section nặng gấp đôi
+  const stmt = db.prepare(
+    `SELECT e.*, p.slug, sp.path, sp.type AS section_type
+     FROM entries_fts f
+     JOIN entries e ON e.id = f.rowid
+     JOIN section_paths sp ON sp.id = e.section_id
+     JOIN projects p ON p.id = sp.project_id
+     WHERE entries_fts MATCH ? AND (? IS NULL OR p.id = ?)
+     ORDER BY bm25(entries_fts, 1, 2, 2) LIMIT ?`,
+  );
+  const hits = new Map<number, HitRow>();
+  for (const match of toFtsTiers(q)) {
+    if (hits.size >= limit) break;
+    for (const r of stmt.all(match, projectId ?? null, projectId ?? null, limit) as HitRow[]) {
+      if (hits.size >= limit) break;
+      if (!hits.has(r.id)) hits.set(r.id, r);
+    }
+  }
+  return [...hits.values()].map((r) => ({
+    ...toEntry(r),
+    projectSlug: r.slug,
+    sectionPath: r.path,
+    sectionType: r.section_type,
+  }));
 }
